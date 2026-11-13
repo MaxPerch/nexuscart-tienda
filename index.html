@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PokéHábitat IoT</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #1d2671, #c33764); color: white; text-align: center; margin: 0; padding: 20px; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(12px); border-radius: 24px; padding: 28px; max-width: 400px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid rgba(255, 255, 255, 0.2); }
+    h1 { margin-top: 0; color: #ffcb05; text-shadow: 2px 2px #3c5aa6; font-size: 1.7em; }
+    .conexion { display: flex; gap: 8px; margin-bottom: 8px; }
+    .conexion input { flex: 1; padding: 10px 12px; border-radius: 10px; border: none; font-size: 0.95em; }
+    .conexion button { padding: 10px 16px; border-radius: 10px; border: none; background: #ffcb05; color: #1d2671; font-weight: bold; cursor: pointer; }
+    .estado { font-size: 0.8em; margin-bottom: 10px; color: #ddd; }
+    .estado .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #e53935; margin-right: 6px; }
+    .estado.ok .dot { background: #43d17a; }
+    .poke-img-container { height: 200px; display: flex; align-items: center; justify-content: center; margin: 10px 0; }
+    img { max-width: 190px; max-height: 190px; filter: drop-shadow(0px 8px 12px rgba(0,0,0,0.6)); transition: transform 0.3s ease; }
+    img:hover { transform: scale(1.08); }
+    .poke-name { font-size: 1.5em; text-transform: uppercase; font-weight: bold; letter-spacing: 1px; margin: 6px 0; }
+    .poke-num { color: #ddd; font-size: 0.9em; }
+    .types { margin: 10px 0; min-height: 30px; }
+    .type { display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 0.85em; font-weight: bold; margin: 0 4px; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+    .body-info { display: flex; justify-content: space-around; background: rgba(0,0,0,0.25); padding: 10px; border-radius: 14px; margin: 12px 0; font-size: 0.85em; color: #ddd; }
+    .body-info b { display: block; color: #ffcb05; font-size: 1.15em; margin-top: 2px; }
+    .stats { text-align: left; margin: 12px 0; }
+    .stat-row { display: flex; align-items: center; font-size: 0.8em; margin: 5px 0; }
+    .stat-name { width: 62px; color: #ddd; }
+    .stat-val { width: 34px; font-weight: bold; text-align: right; margin-right: 8px; }
+    .bar-bg { flex: 1; height: 8px; background: rgba(0,0,0,0.3); border-radius: 6px; overflow: hidden; }
+    .bar { height: 100%; border-radius: 6px; background: #ffcb05; transition: width 0.6s ease; }
+    .sensor-container { display: flex; justify-content: space-around; margin: 16px 0; background: rgba(0,0,0,0.25); padding: 12px; border-radius: 16px; }
+    .sensor-box { font-size: 0.8em; text-transform: uppercase; color: #ddd; }
+    .sensor-value { font-size: 1.2em; font-weight: bold; color: #ffcb05; margin-top: 4px; display: block; }
+    .msg { font-size: 0.95em; background: rgba(255, 255, 255, 0.2); padding: 12px; border-radius: 12px; margin-top: 12px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>PokéHábitat IoT</h1>
+
+    <div class="conexion">
+      <input id="ip" type="text" placeholder="IP del ESP32 (ej. 192.168.1.45)">
+      <button id="btnConectar">Conectar</button>
+    </div>
+    <div id="estado" class="estado"><span class="dot"></span><span id="estadoTxt">Desconectado</span></div>
+
+    <div class="poke-img-container">
+      <img id="pokeImg" src="" alt="Esperando Pokémon...">
+    </div>
+    <div id="pokeName" class="poke-name">Esperando...</div>
+    <div id="pokeNum" class="poke-num"></div>
+    <div id="types" class="types"></div>
+
+    <div class="body-info">
+      <div>Altura<b id="altura">--</b></div>
+      <div>Peso<b id="peso">--</b></div>
+    </div>
+
+    <div id="stats" class="stats"></div>
+
+    <div class="sensor-container">
+      <div class="sensor-box">Temp<span id="temp" class="sensor-value">-- °C</span></div>
+      <div class="sensor-box">Humedad<span id="hum" class="sensor-value">-- %</span></div>
+      <div class="sensor-box">Luz<span id="luz" class="sensor-value">--</span></div>
+    </div>
+
+    <div id="msg" class="msg">Escribe la IP del ESP32 y presiona Conectar.</div>
+  </div>
+
+  <script>
+    // --- Información de cada Pokémon (guardada aquí, sin API) ---
+    var POKEDEX = {
+      1:  { tipos: ['Planta', 'Veneno'],    altura: '0.7', peso: '6.9',  stats: [45, 49, 49, 65, 65, 45] },
+      4:  { tipos: ['Fuego'],               altura: '0.6', peso: '8.5',  stats: [39, 52, 43, 60, 50, 65] },
+      7:  { tipos: ['Agua'],                altura: '0.5', peso: '9.0',  stats: [44, 48, 65, 50, 64, 43] },
+      25: { tipos: ['Eléctrico'],           altura: '0.4', peso: '6.0',  stats: [35, 55, 40, 50, 50, 90] },
+      94: { tipos: ['Fantasma', 'Veneno'],  altura: '1.5', peso: '40.5', stats: [60, 65, 60, 130, 75, 110] }
+    };
+    var COLORES = {
+      'Normal': '#a8a77a', 'Fuego': '#ee8130', 'Agua': '#6390f0', 'Eléctrico': '#d4a900',
+      'Planta': '#5fa83a', 'Veneno': '#a33ea1', 'Fantasma': '#735797'
+    };
+    var NOMBRES_STATS = ['PS', 'Ataque', 'Defensa', 'At. Esp.', 'Def. Esp.', 'Velocidad'];
+
+    var idActual = null;
+    var timer = null;
+    var ipInput = document.getElementById('ip');
+
+    try { ipInput.value = localStorage.getItem('esp32ip') || ''; } catch (e) {}
+
+    function setEstado(ok, texto) {
+      document.getElementById('estado').className = 'estado' + (ok ? ' ok' : '');
+      document.getElementById('estadoTxt').innerText = texto;
+    }
+
+    function dibujarPokemon(d) {
+      var info = POKEDEX[d.pokemon_id];
+      document.getElementById('pokeName').innerText = d.pokemon_name;
+      document.getElementById('pokeNum').innerText = '#' + String(d.pokemon_id).padStart(3, '0');
+      document.getElementById('pokeImg').src =
+        'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/' + d.pokemon_id + '.png';
+      if (!info) return;
+
+      document.getElementById('altura').innerText = info.altura + ' m';
+      document.getElementById('peso').innerText = info.peso + ' kg';
+
+      var t = '';
+      info.tipos.forEach(function(tipo) {
+        t += '<span class="type" style="background:' + (COLORES[tipo] || '#777') + '">' + tipo + '</span>';
+      });
+      document.getElementById('types').innerHTML = t;
+
+      var s = '';
+      for (var i = 0; i < info.stats.length; i++) {
+        var pct = Math.min(100, Math.round(info.stats[i] / 150 * 100));
+        s += '<div class="stat-row"><span class="stat-name">' + NOMBRES_STATS[i] + '</span>' +
+             '<span class="stat-val">' + info.stats[i] + '</span>' +
+             '<div class="bar-bg"><div class="bar" style="width:' + pct + '%"></div></div></div>';
+      }
+      document.getElementById('stats').innerHTML = s;
+    }
+
+    function leerESP32() {
+      var ip = ipInput.value.trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+      fetch('http://' + ip + '/data')
+        .then(function(res) { return res.json(); })
+        .then(function(d) {
+          setEstado(true, 'Conectado a ' + ip);
+          document.getElementById('temp').innerText = d.temp + ' °C';
+          document.getElementById('hum').innerText = d.hum + ' %';
+          document.getElementById('luz').innerText = d.luz;
+          document.getElementById('msg').innerText = d.mensaje;
+          if (d.pokemon_id !== idActual) {
+            idActual = d.pokemon_id;
+            dibujarPokemon(d);
+          }
+        })
+        .catch(function() {
+          setEstado(false, 'Sin conexión con el ESP32');
+        });
+    }
+
+    document.getElementById('btnConectar').addEventListener('click', function() {
+      var ip = ipInput.value.trim();
+      if (!ip) { setEstado(false, 'Escribe la IP primero'); return; }
+      try { localStorage.setItem('esp32ip', ip); } catch (e) {}
+      idActual = null;
+      if (timer) clearInterval(timer);
+      setEstado(false, 'Conectando...');
+      leerESP32();
+      timer = setInterval(leerESP32, 2000);
+    });
+  </script>
+</body>
+</html>
